@@ -41,7 +41,10 @@ BOOL g_vsync = TRUE;
 BOOL g_tearing_support = FALSE;
 BOOL g_fullscreen = FALSE;
 
-LRESULT
+
+#define SetFullScreen( var ) 
+
+ LRESULT
 CALLBACK
 WndProc(
 	HWND   hwnd,
@@ -69,7 +72,7 @@ WndProc(
 					if( alt )
 					{
 				case VK_F11:
-					// SetFullScreen( !g_fullscreen );
+						SetFullScreen( !g_fullscreen );
 					}
 					break;
 			}

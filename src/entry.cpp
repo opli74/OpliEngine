@@ -19,16 +19,16 @@ wWinMain(
 	g_hwnd = CreateWindow(L"GameEngine", hInstance, g_class_name, g_client_width, g_client_height);
 	::ShowWindow(g_hwnd, nCmdShow);
 
-	while (1)
+	while ( 1 )
 	{
-		if (::GetAsyncKeyState(VK_END) & 1) break;
-
 		MSG message;
 		BOOL message_result = ::GetMessage(&message, g_hwnd, 0, 0);
 		if (message_result != 0)
 			::DispatchMessage(&message);
 		else if (message_result == 0)
 			break;
+		else
+			printf("AHH MAIN MESSAGE LOOP SHOULD NOT BE HERE WTF>!?>!? [%d]", GetLastError( ) );
 	};
 
 	FREE_CONSOLE;
