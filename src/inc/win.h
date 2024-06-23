@@ -5,12 +5,8 @@
 #include <Windows.h>
 #include <shellapi.h>	// for CommandLineToArgvW
 
-#ifdef min
-#undef min
-#endif // min
-#ifdef max 
-#undef max
-#endif // max
+#define NOMINMAX
+
 #ifdef CreateWindow
 #undef CreateWindow
 #endif // CreateWindow

@@ -140,11 +140,29 @@ CreateCommandQueue(
 
 /*
 @brief check if tearing support is availble on computer
-@return BOOL - FALSE if tearing supported, FALSE if not supported
+@return BOOL - TRUE if tearing supported, FALSE if not supported
 */
 BOOL
 CheckTearingSupport(
 
+);
+
+/*
+@breif creates the swap buffer device
+@param[in] HWND
+@param[in] ComPtr<ID3D12CommandQueue>
+@param[in] UINT32
+@param[in] UINT32
+@param[in] UINT32
+@return ComPtr<IDXGISwapChain4> CreateSwapChain
+*/
+Microsoft::WRL::ComPtr<IDXGISwapChain4>
+CreateSwapChain(
+	_In_ HWND hwnd,
+	_In_ Microsoft::WRL::ComPtr< ID3D12CommandQueue > command_queue,
+	_In_ UINT32 width,
+	_In_ UINT32 height,
+	_In_ UINT32 buffer_count
 );
 
 #endif // !__LIB_H__

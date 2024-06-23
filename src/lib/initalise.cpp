@@ -6,7 +6,7 @@ CONST UINT8 g_num_frames = 3;
 // Wrap adapter
 BOOL g_use_warp = FALSE;
 
-CONST WCHAR* g_class_name = L"GameEngine";
+CONST WCHAR* g_class_name = L"OpliGameEngine";
 
 UINT32 g_client_width = 1280;
 UINT32 g_client_height = 720;
@@ -15,9 +15,9 @@ UINT32 g_client_height = 720;
 BOOL g_is_initialized = FALSE;
 
 // Window handle
-HWND g_hwnd = nullptr;
+HWND g_hwnd = NULL;
 // Window dimensions & other stuff
-RECT g_win_rect = {};
+RECT g_win_rect = { };
 
 // D3D12 objects
 Microsoft::WRL::ComPtr<ID3D12Device2> g_device;
@@ -33,7 +33,7 @@ UINT g_current_back_buffer_index = 0;
 // GPU synchronization objects
 Microsoft::WRL::ComPtr<ID3D12Fence> g_fence;
 UINT64 g_fence_value = 0;
-UINT64 g_frame_fence_value[g_num_frames] = {};
+UINT64 g_frame_fence_value[g_num_frames] = { };
 HANDLE g_fence_event = nullptr;
 
 // V-sync settings
@@ -97,7 +97,6 @@ WndProc(
 		case WM_DESTROY:
 			::PostQuitMessage( 0 );
 			break;
-		
 		default:
 			return ::DefWindowProc(hwnd, message, wparam, lparam);
 	}
@@ -140,7 +139,7 @@ EnableDebugLayer(
 		IID_PPV_ARGS(&debug_interface) //retrieves interface ptr automatically!!
 	));
 	debug_interface->EnableDebugLayer();
-#endif // DEBUG
+#endif // _DEBUG
 }
 
 void
@@ -179,9 +178,9 @@ RegisterWindowClass(
 	window.lpszClassName = window_name;	// name of window
 	// window.hIconSm    = ::LoadIcon( hinst, NULL ); // icon name has to be valid otherwise RegisterClassExW cries 
 
-	static ATOM atom = ::RegisterClassExW(&window);
+	static HRESULT hr = ::RegisterClassExW(&window);
 #ifdef _DEBUG
-	assertf(atom > 0, "RegisterClassExW failed[ %d ]\n", (INT)GetLastError());
+	assertf( hr > 0, "RegisterClassExW failed[ %d ]\n", (INT)GetLastError());
 #endif // _DEBUG
 };
 
@@ -215,18 +214,18 @@ CreateWindow(
 
 	//HWND WINAPI CreateWindowExW(
 	HWND hwnd = ::CreateWindowExW(
-		NULL, //	_In_ DWORD dwExStyle,	
-		window_title,//	_In_opt_ LPCWSTR lpClassName,
-		window_name,//	_In_opt_ LPCWSTR lpWindowName,
-		WS_OVERLAPPEDWINDOW,//	_In_ DWORD dwStyle,
-		windowx,//	_In_ INT X,
-		windowy,//	_In_ INT Y,
-		window_width,//	_In_ INT nWidth,
-		window_height,//	_In_ INT nHeight,
-		NULL,//	_In_opt_ HWND hWndParent,
-		NULL,//	_In_opt_ HMENU hMenu,
+		NULL,				  //	_In_ DWORD dwExStyle,	
+		window_title,		  //	_In_opt_ LPCWSTR lpClassName,
+		window_name,		  //	_In_opt_ LPCWSTR lpWindowName,
+		WS_OVERLAPPEDWINDOW,  //	_In_ DWORD dwStyle,
+		windowx,			  //	_In_ INT X,
+		windowy,			  //	_In_ INT Y,
+		window_width,		  //	_In_ INT nWidth,
+		window_height,		  //	_In_ INT nHeight,
+		NULL,				  //	_In_opt_ HWND hWndParent,
+		NULL,				  //	_In_opt_ HMENU hMenu,
 		GetModuleHandle(NULL),//	_In_opt_ HINSTANCE hInstance,
-		NULL//	_In_opt_ LPVOID lpParam
+		NULL				  //	_In_opt_ LPVOID lpParam
 	);
 	// );
 
@@ -395,4 +394,60 @@ CheckTearingSupport(
 		}
 	}
 	return TRUE;
+}
+
+Microsoft::WRL::ComPtr<IDXGISwapChain4> 
+CreateSwapChain(
+	HWND hwnd, 
+	Microsoft::WRL::ComPtr<ID3D12CommandQueue> command_queue, 
+	UINT32 width, 
+	UINT32 height, 
+	UINT32 buffer_count
+)
+{
+	Microsoft::WRL::ComPtr< IDXGISwapChain4 > swapchain4;
+	Microsoft::WRL::ComPtr< IDXGIFactory4 >   factory4;
+	UINT create_factory_flags = 0;
+
+#ifdef _DEBUG
+	create_factory_flags = DXGI_CREATE_FACTORY_DEBUG;
+#endif // _DEBUG
+
+	ThrowIfFailed( CreateDXGIFactory2( create_factory_flags, IID_PPV_ARGS( &factory4 ) ) );
+
+	DXGI_SWAP_CHAIN_DESC1 swap_chain_desc = {};
+
+//typedef struct _DXGI_SWAP_CHAIN_DESC1 {
+	swap_chain_desc.Width = width;//	UINT             Width;	resolution width
+	swap_chain_desc.Height = height;//	UINT             Height;	resolution height
+	swap_chain_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;//	DXGI_FORMAT      Format;	defines display format
+	swap_chain_desc.Stereo = FALSE;//	BOOL             Stereo;	specifies if stereo to be used, flip-model swap chain always requires stereo!
+	swap_chain_desc.SampleDesc = { 1, 0 };//	DXGI_SAMPLE_DESC SampleDesc; for multi-sample, not support on flip-model so must be {1, 0}
+	swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;//	DXGI_USAGE       BufferUsage; surface usage and CPU access to backbuffer
+	swap_chain_desc.BufferCount = buffer_count;//	UINT             BufferCount;  amount of buffers in swap chain
+	swap_chain_desc.Scaling = DXGI_SCALING_STRETCH;//	DXGI_SCALING     Scaling;  defines the resize behaviour if backbuffer is different to target
+	swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;//	DXGI_SWAP_EFFECT SwapEffect; swap chain presentation model to use, bitbit is outdated!!
+	swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;//	DXGI_ALPHA_MODE  AlphaMode; defines transparency behaviour for backbuffers
+	// !!!ALWAYS CHECK FOR TEARING SUPPORT!!!
+	swap_chain_desc.Flags = CheckTearingSupport( ) ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;	//	UINT             Flags; just for tearing support
+//} DXGI_SWAP_CHAIN_DESC1;
+
+	Microsoft::WRL::ComPtr<IDXGISwapChain1> swapchain1;
+
+	ThrowIfFailed(factory4
+//HRESULT CreateSwapChainForHwnd(
+		->CreateSwapChainForHwnd(
+			command_queue.Get(), //	[in] IUnknown * pDevice, ptr to command queue
+			hwnd,//	[in] HWND hWnd, handle to window
+			&swap_chain_desc,//	[in] const DXGI_SWAP_CHAIN_DESC1 * pDesc, pointer to swap chain desc struc
+			nullptr,//	[in, optional] const DXGI_SWAP_CHAIN_FULLSCREEN_DESC * pFullscreenDesc, NULL for windowed swap chain, or swap chain fullscreen struct for fullscreen
+			nullptr,//	[in, optional] IDXGIOutput * pRestrictToOutput, idk??
+			&swapchain1//	[out] IDXGISwapChain1 * *ppSwapChain, just out ptr!
+	));
+//);
+	//Disable alt+enter for fullscreen!!
+	ThrowIfFailed( factory4->MakeWindowAssociation( hwnd, DXGI_MWA_NO_ALT_ENTER ) );
+	ThrowIfFailed( swapchain1.As( &swapchain4 ) );
+
+	return swapchain4;
 }
