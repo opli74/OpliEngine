@@ -12,35 +12,63 @@ ThrowIfFailed(
 	HRESULT hr
 )
 {
-	if (FAILED(hr))
+	if( FAILED( hr ) )
 	{
-		throw std::exception();
+		throw std::exception( );
 	}
 }
 
+/*
+* @brief formats a wide (unicode) string with va args dynamically
+* @return WCHAR* - formatted unicode string
+*/
 inline
-void 
-assertf(
-	bool condition,
-	const char* message,
-	...
-)
+WCHAR* 
+__wprintf__(WCHAR const* fmt, ...) 
 {
-	do {
-		if (!condition)
-		{
-			va_list args;
-			va_start(args, message);
-			vfprintf(stderr, message, args);
-			va_end(args);
-		}
-		assert(condition);
-	} while (false);
+    va_list args;
+    va_start(args, fmt);
+
+    // Determine the size of the buffer needed
+    INT size = _vscwprintf(fmt, args);
+    if (size < 0) {
+        va_end(args);
+        return nullptr;  // Error in format string
+    }
+
+    // Allocate the buffer
+    size_t buffersize = size + 1;  // +1 for null terminator
+    WCHAR* buffer =  (WCHAR*)(malloc(buffersize * sizeof(WCHAR)));
+    if ( !buffer ) 
+    {
+        va_end( args );
+        return nullptr;  // memory allocation failed
+    }
+
+    INT ret = vswprintf_s( buffer, buffersize, fmt, args );
+    va_end( args );
+
+    if (ret < 0) 
+    {
+        free( buffer );
+        return nullptr;  // formatting failed
+    }
+
+    return buffer;
 }
 
-//#define assertf(condition, const char* message, ...) do { \
-//if (!(condition)) { va_list args; va_start( args, message ); vfprintf( stderr, message, args ); va_end( args ); } \
-//assert ((condition)); } while(false)
-
+// extended assert took me way too fucking long to figure out
+#define assertf(expression, fmt, ... ) \
+    if (!(expression)) { \
+        WCHAR* str = __wprintf__(L"%s\nNotes: " fmt, _CRT_WIDE(#expression), ##__VA_ARGS__); \
+        if (str) { \
+            _wassert(str, _CRT_WIDE(__FILE__), (unsigned)(__LINE__)); \
+        } \
+        else \
+        { \
+            assert( _CRT_WIDE(#expression) && " additonal string failed to format"); \
+        } \
+        free(str); \
+    } \
 
 #endif // !__HELPER_H__

@@ -1,11 +1,10 @@
 #ifndef __WIN_H__
 #define __WIN_H__
 
+#define NOMINMAX
 #define WIN32_MEAN_AND_LEAN // faster compiling!
 #include <Windows.h>
 #include <shellapi.h>	// for CommandLineToArgvW
-
-#define NOMINMAX
 
 #ifdef CreateWindow
 #undef CreateWindow
