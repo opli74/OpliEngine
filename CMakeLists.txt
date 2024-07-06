@@ -27,6 +27,7 @@ file (GLOB src CMAKE_CONFIGURE_DEPENDS
 		src/lib/*.cpp
 		src/inc/*.h
 			src/inc/d3d/*.h
+			src/inc/headers/*.h
 
 )
 

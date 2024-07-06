@@ -3,6 +3,17 @@
 
 #include "inc.h"
 
+#if defined(DX12TL_EXPORTS)
+#    define DX12TL_DLL __declspec(dllexport)
+#    define DX12TL_EXTERN
+#elif defined(DX12TL_IMPORTS)
+#    define DX12TL_DLL __declspec(dllimport)
+#    define DX12TL_EXTERN extern
+#else
+#    define DX12TL_DLL
+#    define DX12TL_EXTERN
+#endif
+
 /*
 	```` |/|``````````````````|\| ````
 	---- |\| GLOBAL VARIABLES |/| ----
@@ -57,6 +68,8 @@ extern BOOL g_fullscreen;	// full-screen track!!
 	---- |\| FUNCTION DECLRATIONS |/| ----
 	.... |/|......................|\| ....
 */
+
+
 
 /*
 @brief Grabs command line args such as -height to modify global varibles
@@ -293,20 +306,35 @@ Update(
 
 );
 
+/*
+@brief renders to window, basically clears back buffer then "presents" rendered frame
+@return VOID
+*/
 VOID
 Render(
 
 );
 
+/*
+@brief sets fullscreen (not exclusive but full screen borderless window)
+@return VOID
+*/
+VOID
+SetFullScreen(
+	BOOL fullscreen
+);
+
+
+/*
+@brief functionality to be able to change window to new size
+@return VOID
+*/
 VOID
 Resize(
 	UINT32 width,
 	UINT32 height
 );
 
-VOID
-SetFullScreen(
-	BOOL fullscreen
-);
+
 
 #endif // !__LIB_H__

@@ -41,7 +41,7 @@ BOOL g_vsync = TRUE;
 BOOL g_tearing_support = FALSE;
 BOOL g_fullscreen = FALSE;
 
- LRESULT
+LRESULT
 CALLBACK
 WndProc(
 	HWND   hwnd,
@@ -630,12 +630,12 @@ Update(
 	std::chrono::steady_clock::time_point t1 = clock.now( );
 	auto deltatime = t1 - t0;
 	elapsed_time += deltatime.count() * 1e-9;
+
 	if (elapsed_time > 1.0)
 	{
-		WCHAR buffer[500];
-		auto fps = frame_count / elapsed_time;
-		swprintf_s<500>( buffer, L"FPS: %f\n", fps );
-		OutputDebugString( buffer );
+		auto fps = (frame_count / elapsed_time);
+		SetConsoleCursorPosition( GetStdHandle( STD_OUTPUT_HANDLE ), {0, 0});
+		printf( "FPS: %f\n", fps );
 		frame_count = 0;
 		elapsed_time = 0.0;
 	}
@@ -646,13 +646,15 @@ Render(
 
 )
 {
-	auto command_allocator = g_command_allocator[ g_current_back_buffer_index ];
-	auto backbuffer	       = g_backbuffers[ g_current_back_buffer_index ];
+	// retrieve current command alloactor and back buffer resource
+	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator = g_command_allocator[ g_current_back_buffer_index ];
+	Microsoft::WRL::ComPtr<ID3D12Resource>		   backbuffer	     = g_backbuffers[ g_current_back_buffer_index ];
 
 	command_allocator->Reset( );
 	g_commandlist->Reset( command_allocator.Get( ), nullptr );
 
 	{ // clear render target
+		//helper structure for easy initalising of resource barriers
 		CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
 			backbuffer.Get( ),
 			D3D12_RESOURCE_STATE_PRESENT, 
@@ -660,7 +662,9 @@ Render(
 		);
 
 		g_commandlist->ResourceBarrier( 1, &barrier );
-		FLOAT clearcolor[ ] = { .4f, .6f, .9f, 1.f };
+
+		//clear back buffer
+		FLOAT clearcolor[ ] = { .5f, 1.f, 1.f, 1.f };
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rtv( 
 			g_rtv_descriptor_heap->GetCPUDescriptorHandleForHeapStart( ) ,
@@ -668,7 +672,14 @@ Render(
 			g_rtv_descriptor_size
 		);
 
-		g_commandlist->ClearRenderTargetView( rtv, clearcolor, NULL, nullptr );
+		//void ClearRenderTargetView(
+		g_commandlist->ClearRenderTargetView( 
+			rtv, // [in] D3D12_CPU_DESCRIPTOR_HANDLE RenderTargetView, specifies wwhat render target to clear
+			clearcolor, // [in] const FLOAT ColorRGBA[4], the color to fill render target with
+			NULL,//	[in] UINT NumRects, the number of rectangles
+			nullptr // [in] const D3D12_RECT * pRects, an array of rects in resource to clear, NULL clears everything
+		);
+		//);
 	}
 
 	{ // Present
@@ -677,22 +688,36 @@ Render(
 			D3D12_RESOURCE_STATE_RENDER_TARGET,
 			D3D12_RESOURCE_STATE_PRESENT
 		);
+
+		// add a resource to transition to a new correct resource state 
 		g_commandlist->ResourceBarrier( 1, &barrier );
 
+		// must close before executions 
 		ThrowIfFailed( g_commandlist->Close( ) );
 
 		ID3D12CommandList* CONST commandlists[ ] = {
 			g_commandlist.Get()
 		};
 
+		//executes commands in the command lsit
 		g_commandqueue->ExecuteCommandLists( _countof( commandlists ), commandlists );
 
 		UINT sync_interval = g_vsync ? 1 : 0;
+		// if tearing support always use DXGI_PRESENT_ALLOW_TEARING wgeb sync is 0
 		UINT present_flags = g_tearing_support && !g_vsync ? DXGI_PRESENT_ALLOW_TEARING : 0;
-		ThrowIfFailed(g_swapchain->Present(sync_interval, present_flags));
 
+		// present current back buffer using flags
+		//HRESULT Present(
+		ThrowIfFailed(g_swapchain->Present(
+			sync_interval,//UINT SyncInterval, 0 discard this frame if new frame is queue, 1 - 4 present on n vertical blank
+			present_flags//	UINT Flags, defined by DXGI_PRESENT contants, for present options
+		));//);
+
+		// insert signal into queue for stalling CPU thread
 		g_frame_fence_values[ g_current_back_buffer_index ] = Signal( g_commandqueue, g_fence, g_fence_value );
+		// current back buffer not guranteed so make sure
 		g_current_back_buffer_index = g_swapchain->GetCurrentBackBufferIndex( );
+		// before overwriting current back buffer with next frame stall the CPU thread
 		WaitForFenceValue( g_fence, g_frame_fence_values[ g_current_back_buffer_index ], g_fence_event );
 	}
 }
@@ -705,15 +730,20 @@ Resize(
 {
 	if (g_client_width != width || g_client_height != height)
 	{
+		// make sure window is not 0
 		g_client_width = std::max( 1u, width );
 		g_client_height = std::max( 1u, height );
 
+		//clear any GPU commands being sent
 		Flush( g_commandqueue, g_fence, g_fence_value, g_fence_event );
+
 		for (INT i = 0; i < g_num_frames; i++)
 		{
+			//release references to back buffer before swap chain resize
 			g_backbuffers[ i ].Reset( );
 			g_frame_fence_values[ i ] = g_frame_fence_values[ g_current_back_buffer_index ];
 		}
+
 		DXGI_SWAP_CHAIN_DESC swapchaindesc = {};
 		ThrowIfFailed( g_swapchain->GetDesc( &swapchaindesc ) );
 		ThrowIfFailed( g_swapchain->ResizeBuffers( g_num_frames, g_client_width, g_client_height, swapchaindesc.BufferDesc.Format, swapchaindesc.Flags ) );
@@ -727,32 +757,49 @@ VOID
 SetFullScreen(
 	BOOL fullscreen
 )
+// sets full screen borderless window as well checking for 
+// closest monitor to prevent jankiness
 {
 	if (g_fullscreen != fullscreen)
 	{
 		g_fullscreen = fullscreen;
 		if (g_fullscreen)
+		// if going full screen
 		{
+			//get current window dimensions
 			::GetWindowRect( g_hwnd, &g_win_rect );
+			//windows style for borderless
 			UINT windowstyle = WS_OVERLAPPEDWINDOW & ~(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+			//sets window to borderless window style
 			::SetWindowLongW( g_hwnd, GWL_STYLE, windowstyle );
+
+			//retrieves closest monitor handle to window
 			HMONITOR hmonitor = ::MonitorFromWindow( g_hwnd, MONITOR_DEFAULTTONEAREST );
+
+			//gets monitor info ( monitor dimensions )
 			MONITORINFOEX monitor_info = {};
 			monitor_info.cbSize = sizeof( MONITORINFOEX );
 			::GetMonitorInfo( hmonitor, &monitor_info );
+
+			// changes window position and set z-order to highest
+			//BOOL WINAPI SetWindowPos(
 			::SetWindowPos( 
-				g_hwnd, 
-				HWND_TOP,
-				monitor_info.rcMonitor.left,
-				monitor_info.rcMonitor.top,
-				monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
-				monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
-				SWP_FRAMECHANGED | SWP_NOACTIVATE 
+				g_hwnd, // _In_ HWND hWnd, window handle
+				HWND_TOP,// _In_opt_ HWND hWndInsertAfter, z-order of window
+				monitor_info.rcMonitor.left,// _In_ int  X, 
+				monitor_info.rcMonitor.top,// _In_ int  Y,
+				monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,// _In_ int cx,
+				monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,// _In_ int cy,
+				SWP_FRAMECHANGED | SWP_NOACTIVATE // _In_ UINT uFlags window sizing and position flags
 			);
+			//);
+			//show window in maximised state
 			::ShowWindow( g_hwnd, SW_MAXIMIZE );
 		}
 		else
+			// if going back to normal windowed state
 		{
+			// same as before except for windowed styles
 			::SetWindowLong( g_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW );
 			::SetWindowPos(
 				g_hwnd,

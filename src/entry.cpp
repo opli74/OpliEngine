@@ -67,6 +67,8 @@ wWinMain(
 			::TranslateMessage( &message );
 			::DispatchMessage( &message );
 		}
+
+		Sleep( 25 );
 	};
 
 	Flush( g_commandqueue, g_fence, g_fence_value, g_fence_event );
